@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
-import { getPrices } from "@/lib/coingecko";
-import { DERBY_COINS } from "@/lib/constants";
+import { getMarketData } from "@/lib/coingecko";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const prices = await getPrices();
-    const coins = DERBY_COINS.map((c) => ({
-      ...c,
-      price: prices[c.id] ?? 0,
-    }));
+    const coins = await getMarketData();
     return NextResponse.json({ coins, updatedAt: Date.now() });
   } catch (e) {
     console.error(e);

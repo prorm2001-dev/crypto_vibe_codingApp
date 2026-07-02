@@ -1,10 +1,11 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CountdownTimer } from "./CountdownTimer";
+import { LivePriceChart } from "./charts/LivePriceChart";
+import { formatPrice } from "./charts/Sparkline";
 import { getCoin } from "@/lib/constants";
-import { percentChange } from "@/lib/decimal";
 
 type Props = {
   coinId: string;
@@ -13,6 +14,8 @@ type Props = {
   participantCount: number;
   onTick?: () => void;
 };
+
+type PricePoint = { t: number; price: number };
 
 export function ActiveChallengeView({
   coinId,
@@ -23,6 +26,9 @@ export function ActiveChallengeView({
 }: Props) {
   const coin = getCoin(coinId);
   const [livePrice, setLivePrice] = useState<number | null>(null);
+  const [history, setHistory] = useState<PricePoint[]>([]);
+  const [pulse, setPulse] = useState<"up" | "down" | null>(null);
+  const prevPrice = useRef<number | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -31,20 +37,35 @@ export function ActiveChallengeView({
         if (res.ok) {
           const data = await res.json();
           const c = data.coins.find((x: { id: string }) => x.id === coinId);
-          if (c) setLivePrice(c.price);
+          if (c) {
+            setLivePrice(c.price);
+            setHistory((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.price === c.price) return prev;
+              const next = [...prev, { t: Date.now(), price: c.price }];
+              return next.slice(-40);
+            });
+
+            if (prevPrice.current !== null && prevPrice.current !== c.price) {
+              setPulse(c.price > prevPrice.current ? "up" : "down");
+              setTimeout(() => setPulse(null), 600);
+            }
+            prevPrice.current = c.price;
+          }
         }
       } catch {
         /* keep last price */
       }
     };
     load();
-    const id = setInterval(load, 15_000);
+    const id = setInterval(load, 10_000);
     return () => clearInterval(id);
   }, [coinId]);
 
+  const startNum = startingPrice ? parseFloat(startingPrice) : undefined;
   const pct =
-    startingPrice && livePrice !== null
-      ? percentChange(startingPrice, String(livePrice))
+    startNum !== undefined && livePrice !== null
+      ? (((livePrice - startNum) / startNum) * 100).toFixed(2)
       : null;
   const isUp = pct !== null && !pct.startsWith("-");
 
@@ -76,25 +97,40 @@ export function ActiveChallengeView({
 
       <CountdownTimer label="Race ends in" targetTime={endTime} onComplete={onTick} />
 
+      <LivePriceChart
+        history={history}
+        startPrice={startNum}
+        color={coin?.color ?? "#34d399"}
+        height={150}
+      />
+
       <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
-        <div className="rounded-xl bg-black/30 p-2 sm:p-4 min-w-0">
+        <div className="rounded-xl bg-black/30 p-2 sm:p-4 min-w-0 border border-white/5">
           <p className="text-[10px] sm:text-xs text-zinc-500 mb-1">Start</p>
           <p className="font-mono text-[10px] sm:text-sm truncate">
             ${startingPrice ?? "—"}
           </p>
         </div>
-        <div className="rounded-xl bg-black/30 p-2 sm:p-4 min-w-0">
+        <div
+          className={`rounded-xl bg-black/30 p-2 sm:p-4 min-w-0 border transition-colors ${
+            pulse === "up"
+              ? "border-emerald-500/50 bg-emerald-500/10"
+              : pulse === "down"
+                ? "border-red-500/50 bg-red-500/10"
+                : "border-white/5"
+          }`}
+        >
           <p className="text-[10px] sm:text-xs text-zinc-500 mb-1">Live</p>
           <motion.p
             key={livePrice}
-            initial={{ color: "#34d399" }}
-            animate={{ color: "#a7f3d0" }}
-            className="font-mono text-[10px] sm:text-sm font-bold truncate"
+            initial={{ scale: 1.05 }}
+            animate={{ scale: 1 }}
+            className="font-mono text-[10px] sm:text-sm font-bold truncate text-emerald-400"
           >
-            ${livePrice?.toLocaleString(undefined, { maximumFractionDigits: 4 }) ?? "—"}
+            ${livePrice !== null ? formatPrice(livePrice) : "—"}
           </motion.p>
         </div>
-        <div className="rounded-xl bg-black/30 p-2 sm:p-4 min-w-0">
+        <div className="rounded-xl bg-black/30 p-2 sm:p-4 min-w-0 border border-white/5">
           <p className="text-[10px] sm:text-xs text-zinc-500 mb-1">Move</p>
           <p
             className={`font-mono text-[10px] sm:text-sm font-bold ${isUp ? "text-emerald-400" : "text-red-400"}`}

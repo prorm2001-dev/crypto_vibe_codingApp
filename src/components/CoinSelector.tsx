@@ -2,6 +2,8 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { Sparkline, formatChange, formatPrice } from "@/components/charts/Sparkline";
+import { useMarketData } from "@/hooks/useMarketData";
 import { DERBY_COINS } from "@/lib/constants";
 import { useAuth } from "@/context/AuthContext";
 
@@ -23,6 +25,8 @@ export function CoinSelector({
   const [isPickerOpen, setIsPickerOpen] = useState(!selectedCoinId);
   const [picked, setPicked] = useState<string | null>(selectedCoinId ?? null);
   const [error, setError] = useState("");
+  const { coins: marketCoins } = useMarketData(30_000);
+  const marketById = Object.fromEntries(marketCoins.map((c) => [c.id, c]));
 
   useEffect(() => {
     if (!selectedCoinId) {
@@ -131,7 +135,10 @@ export function CoinSelector({
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            {DERBY_COINS.map((coin) => (
+            {DERBY_COINS.map((coin) => {
+              const market = marketById[coin.id];
+              const up = (market?.change24h ?? 0) >= 0;
+              return (
               <motion.button
                 key={coin.id}
                 type="button"
@@ -139,20 +146,52 @@ export function CoinSelector({
                 whileHover={{ scale: disabled ? 1 : 1.05 }}
                 whileTap={{ scale: disabled ? 1 : 0.95 }}
                 onClick={() => setPicked(coin.id)}
-                className={`p-4 rounded-xl border transition ${
+                className={`p-3 sm:p-4 rounded-xl border transition text-left ${
                   picked === coin.id
                     ? "border-emerald-400 bg-emerald-500/20 shadow-lg shadow-emerald-500/20"
                     : "border-white/10 bg-black/20 hover:border-white/20"
                 } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
               >
-                <span
-                  className="block w-3 h-3 rounded-full mx-auto mb-2"
-                  style={{ background: coin.color }}
-                />
-                <span className="font-bold">{coin.symbol}</span>
-                <span className="block text-xs text-zinc-500">{coin.name}</span>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span
+                    className="w-3 h-3 rounded-full shrink-0"
+                    style={{ background: coin.color }}
+                  />
+                  {market && (
+                    <span
+                      className={`text-[9px] font-bold px-1 py-0.5 rounded ${
+                        up
+                          ? "text-emerald-400 bg-emerald-500/15"
+                          : "text-red-400 bg-red-500/15"
+                      }`}
+                    >
+                      {formatChange(market.change24h)}
+                    </span>
+                  )}
+                </div>
+                <span className="font-bold block">{coin.symbol}</span>
+                {market ? (
+                  <>
+                    <p className="font-mono text-[10px] text-emerald-400/90 mt-0.5">
+                      ${formatPrice(market.price)}
+                    </p>
+                    <div className="mt-2 flex justify-center">
+                      <Sparkline
+                        data={market.sparkline7d}
+                        color={up ? coin.color : "#f87171"}
+                        width={64}
+                        height={24}
+                        filled={false}
+                        animate={false}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <span className="block text-xs text-zinc-500">{coin.name}</span>
+                )}
               </motion.button>
-            ))}
+            );
+            })}
           </div>
           {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
           <button

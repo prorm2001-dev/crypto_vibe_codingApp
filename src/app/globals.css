@@ -187,3 +187,30 @@ body {
   0%, 100% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
 }
+
+@keyframes priceFlashUp {
+  0% { color: #6ee7b7; text-shadow: 0 0 8px rgba(52, 211, 153, 0.6); }
+  100% { color: #34d399; text-shadow: none; }
+}
+
+@keyframes priceFlashDown {
+  0% { color: #fca5a5; text-shadow: 0 0 8px rgba(248, 113, 113, 0.6); }
+  100% { color: #f87171; text-shadow: none; }
+}
+
+.price-flash-up {
+  animation: priceFlashUp 0.7s ease-out;
+}
+
+.price-flash-down {
+  animation: priceFlashDown 0.7s ease-out;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
