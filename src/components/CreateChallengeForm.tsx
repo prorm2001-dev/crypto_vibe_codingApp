@@ -1,22 +1,72 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+/** Format Date for `<input type="datetime-local" />` in local timezone */
+function toDatetimeLocalValue(date: Date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function defaultStartDatetime() {
+  const d = new Date(Date.now() + 5 * 60_000);
+  d.setSeconds(0, 0);
+  return toDatetimeLocalValue(d);
+}
+
+function formatPreview(ts: number) {
+  return new Date(ts).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 export function CreateChallengeForm({ onCreated }: { onCreated?: () => void }) {
   const { apiFetch } = useAuth();
   const [entryAmount, setEntryAmount] = useState(100);
   const [durationMins, setDurationMins] = useState(5);
-  const [startDelayMins, setStartDelayMins] = useState(2);
+  const [startDatetime, setStartDatetime] = useState(defaultStartDatetime);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
+
+  const minDatetime = useMemo(() => {
+    const d = new Date(Date.now() + 60_000);
+    d.setSeconds(0, 0);
+    return toDatetimeLocalValue(d);
+  }, [open]);
+
+  const startTimestamp = useMemo(() => {
+    const ts = new Date(startDatetime).getTime();
+    return Number.isFinite(ts) ? ts : 0;
+  }, [startDatetime]);
+
+  const endTimestamp = startTimestamp + durationMins * 60_000;
+
+  const resetForm = useCallback(() => {
+    setEntryAmount(100);
+    setDurationMins(5);
+    setStartDatetime(defaultStartDatetime());
+    setError("");
+  }, []);
 
   const close = () => {
     if (loading) return;
     setOpen(false);
     setError("");
+  };
+
+  const openModal = () => {
+    resetForm();
+    setOpen(true);
   };
 
   useEffect(() => {
@@ -36,8 +86,22 @@ export function CreateChallengeForm({ onCreated }: { onCreated?: () => void }) {
     e.preventDefault();
     setLoading(true);
     setError("");
-    const startTime = Date.now() + startDelayMins * 60_000;
+
+    const startTime = new Date(startDatetime).getTime();
     const endTime = startTime + durationMins * 60_000;
+
+    if (!Number.isFinite(startTime)) {
+      setError("Please choose a valid start date and time");
+      setLoading(false);
+      return;
+    }
+
+    if (startTime <= Date.now() + 60_000) {
+      setError("Start time must be at least 1 minute from now");
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await apiFetch("/api/challenges/create", {
         method: "POST",
@@ -60,7 +124,7 @@ export function CreateChallengeForm({ onCreated }: { onCreated?: () => void }) {
       <motion.button
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
-        onClick={() => setOpen(true)}
+        onClick={openModal}
         className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-sm font-semibold text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 transition-shadow"
       >
         <span className="text-base leading-none">+</span>
@@ -99,7 +163,7 @@ export function CreateChallengeForm({ onCreated }: { onCreated?: () => void }) {
                     New Challenge
                   </h3>
                   <p className="text-xs text-zinc-500 mt-1">
-                    Set entry fee and race duration
+                    Set entry fee, start time, and race duration
                   </p>
                 </div>
                 <button
@@ -128,36 +192,54 @@ export function CreateChallengeForm({ onCreated }: { onCreated?: () => void }) {
                     autoFocus
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-zinc-400">
-                      Starts in (min)
-                    </label>
-                    <input
-                      type="number"
-                      className="input-field mt-1"
-                      min={1}
-                      max={60}
-                      value={startDelayMins}
-                      onChange={(e) =>
-                        setStartDelayMins(Number(e.target.value))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-zinc-400">
-                      Duration (min)
-                    </label>
-                    <input
-                      type="number"
-                      className="input-field mt-1"
-                      min={2}
-                      max={30}
-                      value={durationMins}
-                      onChange={(e) => setDurationMins(Number(e.target.value))}
-                    />
-                  </div>
+
+                <div>
+                  <label className="text-xs text-zinc-400">
+                    Start date &amp; time
+                  </label>
+                  <input
+                    type="datetime-local"
+                    className="input-field datetime-input mt-1"
+                    value={startDatetime}
+                    min={minDatetime}
+                    onChange={(e) => setStartDatetime(e.target.value)}
+                    required
+                  />
+                  <p className="text-[10px] text-zinc-600 mt-1.5">
+                    Your local timezone · must be at least 1 min from now
+                  </p>
                 </div>
+
+                <div>
+                  <label className="text-xs text-zinc-400">
+                    Duration (min)
+                  </label>
+                  <input
+                    type="number"
+                    className="input-field mt-1"
+                    min={2}
+                    max={30}
+                    value={durationMins}
+                    onChange={(e) => setDurationMins(Number(e.target.value))}
+                  />
+                </div>
+
+                {startTimestamp > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="rounded-xl bg-emerald-500/5 border border-emerald-500/15 px-3 py-2.5 text-xs space-y-1"
+                  >
+                    <p className="text-zinc-400">
+                      <span className="text-emerald-400/90 font-medium">Starts:</span>{" "}
+                      {formatPreview(startTimestamp)}
+                    </p>
+                    <p className="text-zinc-400">
+                      <span className="text-emerald-400/90 font-medium">Ends:</span>{" "}
+                      {formatPreview(endTimestamp)}
+                    </p>
+                  </motion.div>
+                )}
 
                 {error && (
                   <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
