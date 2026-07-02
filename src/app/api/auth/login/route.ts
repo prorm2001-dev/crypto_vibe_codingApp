@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { adminDb } from "@/lib/admin";
 import { signToken } from "@/lib/auth";
+import { authCookieOptions } from "@/lib/cookies";
+import { assertServerEnv } from "@/lib/env";
+
+export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
+    assertServerEnv();
     const { email, password } = await req.json();
 
     if (!email || !password) {
@@ -52,15 +57,15 @@ export async function POST(req: NextRequest) {
         walletBalance: profile.walletBalance,
       },
     });
-    res.cookies.set("derby_token", token, {
-      httpOnly: true,
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    });
+    res.cookies.set("derby_token", token, authCookieOptions(60 * 60 * 24 * 7));
     return res;
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: "Login failed" }, { status: 500 });
+    const message = e instanceof Error ? e.message : "Login failed";
+    const isEnv = message.startsWith("Missing env:");
+    return NextResponse.json(
+      { error: isEnv ? "Server configuration error" : "Login failed" },
+      { status: isEnv ? 503 : 500 },
+    );
   }
 }

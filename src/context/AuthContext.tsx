@@ -32,35 +32,59 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function readStoredToken() {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("derby_token");
+}
+
+function authHeaders(token: string | null): HeadersInit {
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const resolveToken = useCallback(
+    () => token ?? readStoredToken(),
+    [token],
+  );
+
   const apiFetch = useCallback(
     async (url: string, options: RequestInit = {}) => {
+      const activeToken = resolveToken();
       const headers = new Headers(options.headers);
-      if (token) headers.set("Authorization", `Bearer ${token}`);
+      if (activeToken) headers.set("Authorization", `Bearer ${activeToken}`);
       if (!headers.has("Content-Type") && options.body) {
         headers.set("Content-Type", "application/json");
       }
       return fetch(url, { ...options, headers, credentials: "include" });
     },
-    [token],
+    [resolveToken],
   );
 
   const refreshUser = useCallback(async () => {
-    const res = await fetch("/api/auth/me", { credentials: "include" });
+    const activeToken = resolveToken();
+    const res = await fetch("/api/auth/me", {
+      credentials: "include",
+      headers: authHeaders(activeToken),
+    });
     if (res.ok) {
       const data = await res.json();
       setUser(data.user);
     }
-  }, []);
+  }, [resolveToken]);
 
   useEffect(() => {
-    const stored = localStorage.getItem("derby_token");
+    const stored = readStoredToken();
     if (stored) setToken(stored);
-    fetch("/api/auth/me", { credentials: "include" })
+
+    fetch("/api/auth/me", {
+      credentials: "include",
+      headers: authHeaders(stored),
+    })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.user) setUser(data.user);
@@ -101,7 +125,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await fetch("/api/auth/me", { method: "DELETE", credentials: "include" });
+    const activeToken = resolveToken();
+    await fetch("/api/auth/me", {
+      method: "DELETE",
+      credentials: "include",
+      headers: authHeaders(activeToken),
+    });
     localStorage.removeItem("derby_token");
     setToken(null);
     setUser(null);

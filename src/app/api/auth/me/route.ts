@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/admin";
 import { getAuthFromRequest } from "@/lib/auth";
+import { authCookieOptions } from "@/lib/cookies";
+
+export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const auth = await getAuthFromRequest(req);
@@ -32,6 +35,6 @@ export async function GET(req: NextRequest) {
 
 export async function DELETE() {
   const res = NextResponse.json({ ok: true });
-  res.cookies.set("derby_token", "", { httpOnly: true, maxAge: 0, path: "/" });
+  res.cookies.set("derby_token", "", authCookieOptions(0));
   return res;
 }
