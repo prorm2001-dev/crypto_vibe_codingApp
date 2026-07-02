@@ -25,7 +25,13 @@ export function LivePriceChart({
 
   const { linePath, areaPath, minY, maxY, latest } = useMemo(() => {
     if (history.length < 2) {
-      return { linePath: "", areaPath: "", minY: 0, maxY: 0, latest: history[0]?.price };
+      return {
+        linePath: "",
+        areaPath: "",
+        minY: 0,
+        maxY: 0,
+        latest: null as { x: number; y: number; price: number } | null,
+      };
     }
 
     const prices = history.map((p) => p.price);
